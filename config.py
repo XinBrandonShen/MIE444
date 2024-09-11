@@ -116,49 +116,35 @@ motors = {
 
 # Drives
 w0_info = {
-    'id': 'w0',
-    'position': [0, 0],
-    'rotation': 0,
-    'visible': False,
-    'velocity': [0, 6],
-    'ang_velocity': 0,
-    'motors': [motors['m0'], motors['m1']],
-    'motor_direction': [1, 1],
-    'bias': {'x': 0, 'y': 0, 'rotation': 0},
-    'error': {'x': 0, 'y': 0, 'rotation': 0}
+ 'id': 'w0',
+ 'position': [0, 0],
+ 'rotation': 0,
+ 'visible': False,
+ 'velocity': [0, 6],
+ 'ang_velocity': 0,
+ 'motors': [motors['m0'], motors['m1']],
+ 'motor_direction': [1, 1],
+ #'bias': {'x': 0, 'y': 0, 'rotation': 0.2},
+ #'error': {'x': 0.02, 'y': 0.05, 'rotation': 1}
 }
-
-d0_info = {
-    'id': 'd0',
-    'position': [0, 0],
-    'rotation': 0,
-    'visible': False,
-    'velocity': [-6, 0],
-    'ang_velocity': 0,
-    'motors': [motors['m2'], motors['m3']],
-    'motor_direction': [1, 1],
-    'bias': {'x': 0, 'y': 0, 'rotation': 0},
-    'error': {'x': 0, 'y': 0, 'rotation': 0}
-}
-
 r0_info = {
-    'id': 'r0',
-    'position': [0, 0],
-    'rotation': 0,
-    'visible': False,
-    'velocity': [0, 0],
-    'ang_velocity': 120,
-    'motors': [motors['m0'], motors['m1'], motors['m2'], motors['m3']],
-    'motor_direction': [1, -1, 1, -1],
-    'bias': {'x': 0, 'y': 0, 'rotation': 0},
-    'error': {'x': 0, 'y': 0, 'rotation': 0}
+ 'id': 'r0',
+ 'position': [0, 0],
+ 'rotation': 0,
+ 'visible': False,
+ 'velocity': [0, 0],
+ 'ang_velocity': 120,
+ 'motors': [motors['m0'], motors['m1']],
+ 'motor_direction': [1, -1],
+ #'bias': {'x': 0, 'y': 0, 'rotation': 0.01},
+ #'error': {'x': 0.003, 'y': 0.003, 'rotation': 0.02}
+}
+drives = {
+ 'w0': Drive(w0_info),
+ 'r0': Drive(r0_info)
 }
 
-drives = {
-    'w0': Drive(w0_info),
-    'd0': Drive(d0_info),
-    'r0': Drive(r0_info)
-}
+
 
 # Sensors
 u0_info = {

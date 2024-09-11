@@ -214,7 +214,7 @@ FRAMEEND = ']'
 CMD_DELIMITER = ','
 
 ### Set whether to use TCP (SimMeR) or serial (Arduino) ###
-SIMULATE = False
+SIMULATE = True
 
 
 
@@ -239,7 +239,7 @@ else:
 
 
 ############## Main section for the communication client ##############
-RUN_COMMUNICATION_CLIENT = True # If true, run this. If false, skip it
+RUN_COMMUNICATION_CLIENT = False # If true, run this. If false, skip it
 while RUN_COMMUNICATION_CLIENT:
     # Input a command
     cmd = input('Type in a string to send: ')
@@ -265,7 +265,7 @@ CMD_SEQUENCE = ['w0:36', 'r0:90', 'w0:36', 'r0:90', 'w0:12', 'r0:-90', 'w0:24', 
 LOOP_PAUSE_TIME = 1 # seconds
 
 # Main loop
-RUN_DEAD_RECKONING = False # If true, run this. If false, skip it
+RUN_DEAD_RECKONING = True # If true, run this. If false, skip it
 ct = 0
 while RUN_DEAD_RECKONING:
     # Pause for a little while so as to not spam commands insanely fast
