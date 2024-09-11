@@ -53,12 +53,13 @@ robot_start_position = [6, 42]  # Robot starting location (in)
 robot_start_rotation = 180      # Robot starting rotation (deg)
 robot_width = 6                 # Robot width in inches
 robot_height = 6                # Robot height in inches
-robot_outline = [               # Robot outline, relative to center position
-                pm.Vector2(-robot_width/2, -robot_width/2),
-                pm.Vector2(-robot_width/2,  robot_width/2),
-                pm.Vector2( robot_width/2,  robot_width/2),
-                pm.Vector2( robot_width/2, -robot_width/2)
-                ]
+robot_outline = [pm.Vector2(-2.875,-4),
+                pm.Vector2(-2.875,2.75),
+                pm.Vector2(-1.655,4),
+                pm.Vector2(1.655,4),
+                pm.Vector2(2.875,2.75),
+                pm.Vector2(2.875,-4)]
+
 
 # Maze definition information
 wall_segment_length = 12    # Length of maze wall segments (inches)
