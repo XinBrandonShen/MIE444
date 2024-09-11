@@ -262,7 +262,7 @@ while RUN_COMMUNICATION_CLIENT:
 ############## Main section for the open loop control algorithm ##############
 # The sequence of commands to run
 CMD_SEQUENCE = ['w0:36', 'r0:90', 'w0:36', 'r0:90', 'w0:12', 'r0:-90', 'w0:24', 'r0:-90', 'w0:6', 'r0:720']
-LOOP_PAUSE_TIME = 1 # seconds
+LOOP_PAUSE_TIME = 0.25 # seconds
 
 # Main loop
 RUN_DEAD_RECKONING = True # If true, run this. If false, skip it
@@ -271,22 +271,41 @@ while RUN_DEAD_RECKONING:
     # Pause for a little while so as to not spam commands insanely fast
     time.sleep(LOOP_PAUSE_TIME)
 
+    # Emergent stop
+    emergency_stop = False
+
     # If the command sequence hasn't been completed yet
     if ct < len(CMD_SEQUENCE):
 
-        # Check an ultrasonic sensor 'u0'
-        packet_tx = packetize('u0')
-        if packet_tx:
-            transmit(packet_tx)
-            [responses, time_rx] = receive()
-            print(f"Ultrasonic 0 reading: {response_string('u0',responses)}")
+        # Emergency stop flag
+        emergency_stop = False
 
-        # Check an ultrasonic sensor 'u1'
-        packet_tx = packetize('u1')
-        if packet_tx:
-            transmit(packet_tx)
-            [responses, time_rx] = receive()
-            print(f"Ultrasonic 1 reading: {response_string('u1',responses)}")
+        # Check ultrasonic sensors 'u0', 'u1', 'u2', 'u3' for emergency stop
+        sensor_ids = ['u0', 'u1', 'u2', 'u3']  # List of ultrasonic sensors
+        for sensor_id in sensor_ids:
+            packet_tx = packetize(sensor_id)  # Request sensor data
+            if packet_tx:
+                transmit(packet_tx)
+                [responses, time_rx] = receive()
+                sensor_value = float(responses[0][1])  # Assuming sensor data is in the first response
+                print(f"Ultrasonic {sensor_id} reading: {sensor_value}")
+
+                # If the sensor reading is lower than 2, initiate emergency stop
+                if sensor_value < 2:
+                    print(f"Emergency stop triggered by {sensor_id} with value {sensor_value}")
+                    emergency_stop = True
+                    break  # Stop checking sensors, trigger the emergency stop
+
+        # If an emergency stop is triggered, send the stop command 'xx'
+        if emergency_stop:
+            packet_tx = packetize('xx')  # Emergency stop command
+            if packet_tx:
+                transmit(packet_tx)
+                [responses, time_rx] = receive()
+                print(f"Emergency stop command response: {response_string('xx', responses)}")
+            RUN_DEAD_RECKONING = False  # Stop the loop after emergency stop
+            continue  # Skip the rest of the loop and stop
+
 
         # Check the remaining three sensors: gyroscope, compass, and IR
         packet_tx = packetize('g0,c0,i0')
