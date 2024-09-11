@@ -95,7 +95,7 @@ block_color = (127, 127, 0) # Tuple with robot perimeter color in (R,G,B) format
 # Motors
 m0_info = {
     'id': 'm0',
-    'position': [2, 0],
+    'position': [3.125, 0],
     'rotation': 0,
     'visible': True,
     'color': (128, 128, 0)
@@ -103,33 +103,15 @@ m0_info = {
 
 m1_info = {
     'id': 'm0',
-    'position': [-2, 0],
+    'position': [-3.125, 0],
     'rotation': 0,
     'visible': True,
     'color': (0, 128, 0)
 }
 
-m2_info = {
-    'id': 'm0',
-    'position': [0, 2],
-    'rotation': 90,
-    'visible': True,
-    'color': (128, 0, 0)
-}
-
-m3_info = {
-    'id': 'm0',
-    'position': [0, -2],
-    'rotation': 90,
-    'visible': True,
-    'color': (0, 0, 128)
-}
-
 motors = {
     'm0': MotorSimple(m0_info),
     'm1': MotorSimple(m1_info),
-    'm2': MotorSimple(m2_info),
-    'm3': MotorSimple(m3_info)
 }
 
 # Drives
@@ -180,75 +162,70 @@ drives = {
 
 # Sensors
 u0_info = {
-    'id': 'u0',
-    'position': [0, 3],
-    'height': 2,
-    'rotation': 0,
-    'error': 0.02,
-    'outline': [
-        pm.Vector2(-1, -0.5),
-        pm.Vector2(-1, 0.5),
-        pm.Vector2(1, 0.5),
-        pm.Vector2(1, -0.5)
-    ],
-    'visible': True,
-    'visible_measurement': True
+ 'id': 'u0',
+ 'position': [0, 2.5],
+ 'height': 1,
+ 'rotation': 0,
+ #'error': 0.02,
+ 'outline': [
+ pm.Vector2(-1, -0.5),
+ pm.Vector2(-1, 0.5),
+ pm.Vector2(1, 0.5),
+ pm.Vector2(1, -0.5)
+ ],
+ 'visible': True,
+ 'visible_measurement': True
 }
-
 u1_info = {
-    'id': 'u1',
-    'position': [0, 1],
-    'height': 4,
-    'rotation': 0,
-    'error': 0.02,
-    'outline': [
-        pm.Vector2(-1, -0.5),
-        pm.Vector2(-1, 0.5),
-        pm.Vector2(1, 0.5),
-        pm.Vector2(1, -0.5)
-    ],
-    'visible': True,
-    'visible_measurement': True
+ 'id': 'u1',
+ 'position': [-2.5, 0],
+ 'height': 1,
+ 'rotation': 90,
+ #'error': 0.02,
+ 'outline': [
+ pm.Vector2(-1, -0.5),
+ pm.Vector2(-1, 0.5),
+ pm.Vector2(1, 0.5),
+ pm.Vector2(1, -0.5)
+ ],
+ 'visible': True,
+ 'visible_measurement': True
 }
-
-g0_info = {
-    'id': 'u0',
-    'position': [0, 0],
-    'rotation': 0,
-    'error': 0.02,
-    'bias': 0.1,
-    'visible': False
+u2_info = {
+ 'id': 'u2',
+ 'position': [2.5, 0],
+ 'height': 1,
+ 'rotation': -90,
+ #'error': 0.02,
+ 'outline': [
+ pm.Vector2(-1, -0.5),
+ pm.Vector2(-1, 0.5),
+ pm.Vector2(1, 0.5),
+ pm.Vector2(1, -0.5)
+ ],
+ 'visible': True,
+ 'visible_measurement': True
 }
-
-c0_info = {
-    'id': 'c0',
-    'position': [0, 0],
-    'rotation': 0,
-    'error': 0.02,
-    'bias': 0.1,
-    'visible': False
+u3_info = {
+ 'id': 'u3',
+ 'position': [0, -2.5],
+ 'height': 1,
+ 'rotation': 180,
+ #'error': 0.02,
+ 'outline': [
+ pm.Vector2(-1, -0.5),
+ pm.Vector2(-1, 0.5),
+ pm.Vector2(1, 0.5),
+ pm.Vector2(1, -0.5)
+ ],
+ 'visible': True,
+ 'visible_measurement': True
 }
-
-i0_info = {
-    'id': 'i0',
-    'position': [0, -1],
-    'height': 1.5,
-    'rotation': 0,
-    'fov': 60,
-    'threshold': 0.7,
-    'error': 0.05,
-    'bias': 0.1,
-    'color': (127, 127, 127),
-    'visible': True,
-    'visible_measurement': True
-}
-
 sensors = {
-    'u0': Ultrasonic(u0_info),
-    'u1': Ultrasonic(u1_info),
-    'g0': Gyroscope(g0_info),
-    'c0': Compass(c0_info),
-    'i0': Infrared(i0_info)
+ 'u0': Ultrasonic(u0_info),
+ 'u1': Ultrasonic(u1_info),
+ 'u2': Ultrasonic(u2_info),
+ 'u3': Ultrasonic(u3_info)
 }
 
 
