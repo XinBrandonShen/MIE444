@@ -26,10 +26,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 # connection between a computer and the device. If using this package, the BAUDRATE constant
 # should be left as the default 9600 bps.
 
+import threading
 import socket
 import time
 from datetime import datetime
 import serial
+
 
 # Wrapper functions
 def transmit(data):
@@ -197,6 +199,8 @@ def validate_responses(cmd_list: list, responses_list: list):
     return valid
 
 
+
+
 ############## Constant Definitions Begin ##############
 ### Network Setup ###
 HOST = '127.0.0.1'      # The server's hostname or IP address
@@ -238,137 +242,177 @@ else:
 
 
 
+
+ULTRASONIC_THRESHOLD = 2  # Threshold to slow down when approaching obstacle (in inches)
+REVERSE_DISTANCE = 2  # Distance to reverse when an obstacle is detected (in inches)
+OBSTACLE_AVOIDING = False  # Flag to indicate when obstacle avoidance is active
+
 ############## Main section for the communication client ##############
-RUN_COMMUNICATION_CLIENT = False # If true, run this. If false, skip it
-while RUN_COMMUNICATION_CLIENT:
-    # Input a command
-    cmd = input('Type in a string to send: ')
+RUN_COMMUNICATION_CLIENT = True  # To control the main loop
 
-    # Send the command
-    packet_tx = packetize(cmd)
-    if packet_tx:
-        transmit(packet_tx)
+def command_execution_loop():
+    '''Main loop to receive and execute typed commands'''
+    global OBSTACLE_AVOIDING
+    while RUN_COMMUNICATION_CLIENT:
+        cmd = input('Type in a string to send: ')
+        if OBSTACLE_AVOIDING:
+            print("Obstacle avoidance is active, pausing typed commands.")
+            continue  # Skip user command if avoidance is active
 
-    # Receive the response
-    [responses, time_rx] = receive()
-    if responses[0]:
-        print(f"At time '{time_rx}' received from {SOURCE}:\n{response_string(cmd, responses)}")
-    else:
-        print(f"At time '{time_rx}' received from {SOURCE}:\nMalformed Packet")
+        # Send the command
+        packet_tx = packetize(cmd)
+        if packet_tx:
+            transmit(packet_tx)
+        
+        # Receive the response
+        result = receive()
+        if result is not None:
+            [responses, time_rx] = result
+            if responses[0]:
+                print(f"At time '{time_rx}' received from {SOURCE}:\n{response_string(cmd, responses)}")
+            else:
+                print(f"At time '{time_rx}' received from {SOURCE}:\nMalformed Packet")
+        else:
+            print("No response received or connection issue occurred.")
 
-
-
-# Ultrasonic and Gyroscope thresholds
-ULTRASONIC_THRESHOLD = 2  # Threshold for obstacle detection (in inches)
-GYROSCOPE_CORRECTION_THRESHOLD = 5  # Threshold for correcting drift (in degrees)
 
 def check_ultrasonic_sensors():
-    '''Check ultrasonic sensors for potential obstacles'''
-    for sensor_id in ['u0', 'u1', 'u2', 'u3']:  # Assuming you have 4 ultrasonic sensors
+    '''Check ultrasonic sensors for potential obstacles and return readings'''
+    readings = {}  # Store the readings from all sensors
+    for sensor_id in ['u0', 'u1', 'u2', 'u3']:  # Assuming 4 ultrasonic sensors
         packet_tx = packetize(sensor_id)
         if packet_tx:
             transmit(packet_tx)
-            [responses, time_rx] = receive()
-            sensor_reading = float(responses[0][1])
-            print(f"Ultrasonic sensor {sensor_id} reading: {sensor_reading} inches")
-            
-            if sensor_reading < ULTRASONIC_THRESHOLD:
-                # Obstacle detected, stop the rover
-                print(f"Obstacle detected by {sensor_id}, stopping rover.")
-                packet_tx = packetize('xx')  # Emergency stop command
-                if packet_tx:
-                    transmit(packet_tx)
-                    [responses, time_rx] = receive()
-                    return False  # Indicates an obstacle was found and the rover stopped
-    return True
-
-def correct_drift_with_gyroscope():
-    '''Correct drift based on gyroscope readings'''
-    packet_tx = packetize('g0')  # Request gyroscope reading (assuming gyroscope ID is 'g0')
-    if packet_tx:
-        transmit(packet_tx)
-        [responses, time_rx] = receive()
-        gyro_reading = float(responses[0][1])
-        print(f"Gyroscope reading: {gyro_reading} degrees")
-
-        if abs(gyro_reading) > GYROSCOPE_CORRECTION_THRESHOLD:
-            # Significant drift detected, correct the direction
-            correction = -gyro_reading  # Rotate in the opposite direction of drift
-            print(f"Correcting drift by rotating {correction} degrees")
-            packet_tx = packetize(f"r0:{correction}")
-            if packet_tx:
-                transmit(packet_tx)
-                [responses, time_rx] = receive()
-                print(f"Gyroscope correction response: {response_string(f'r0:{correction}', responses)}")
+            result = receive()
+            if result is not None:
+                [responses, time_rx] = result
+                sensor_reading = float(responses[0][1])
+                readings[sensor_id] = sensor_reading
+                # Debugging
+                #print(f"Ultrasonic sensor {sensor_id} reading: {sensor_reading} inches")
+                #print(f"Failed to receive a response from sensor {sensor_id}.")
+    return readings
 
 
-def avoid_obstacle():
+def avoid_obstacle(readings):
     '''Determine which direction to turn based on sensor readings'''
-    # Check if left or right sensor detects an obstacle first
-    left_sensor_packet = packetize('u1')  # Assuming 'u1' is the left sensor
-    right_sensor_packet = packetize('u2')  # Assuming 'u2' is the right sensor
-    
-    transmit(left_sensor_packet)
-    [left_responses, _] = receive()
-    left_sensor_reading = float(left_responses[0][1])
-    
-    transmit(right_sensor_packet)
-    [right_responses, _] = receive()
-    right_sensor_reading = float(right_responses[0][1])
-    
-    # Determine direction based on which side is clearer
-    if left_sensor_reading < ULTRASONIC_THRESHOLD and right_sensor_reading >= ULTRASONIC_THRESHOLD:
-        print("Obstacle on the left, turning right")
-        packet_tx = packetize('r0:90')  # Turn 90 degrees right
-    elif right_sensor_reading < ULTRASONIC_THRESHOLD and left_sensor_reading >= ULTRASONIC_THRESHOLD:
-        print("Obstacle on the right, turning left")
-        packet_tx = packetize('r0:-90')  # Turn 90 degrees left
-    else:
-        print("Obstacles on both sides, reversing")
-        packet_tx = packetize('w0:-6')  # Reverse 6 inches
-    
-    if packet_tx:
-        transmit(packet_tx)
-        [responses, _] = receive()
-        print(f"Turn/Reverse command response: {response_string(packet_tx, responses)}")
+    global OBSTACLE_AVOIDING
+    OBSTACLE_AVOIDING = True  # Set flag to indicate obstacle avoidance is active
+    #print("Starting obstacle avoidance...")
+
+    left_sensor_reading = readings.get('u1', float('inf'))  # Left sensor
+    right_sensor_reading = readings.get('u2', float('inf'))  # Right sensor
+    front_sensor_reading = readings.get('u0', float('inf'))  # Front sensor
+    back_sensor_reading = readings.get('u3', float('inf'))  # Back sensor
+
+    # Step 1: Reverse if front sensor detects an obstacle
+    if front_sensor_reading < ULTRASONIC_THRESHOLD:
+        #print(f"Obstacle detected ahead. Reversing by {REVERSE_DISTANCE} inches.")
+        reverse_packet = packetize(f"w0:-{REVERSE_DISTANCE}")
+        if reverse_packet:
+            transmit(reverse_packet)
+            result = receive()
+            if result is not None:
+                [responses, _] = result
+                #print(f"Reverse command response: {response_string(reverse_packet, responses)}")
+    if back_sensor_reading < ULTRASONIC_THRESHOLD:
+        #print(f"Obstacle detected behide. forward by {REVERSE_DISTANCE} inches.")
+        reverse_packet = packetize(f"w0:{REVERSE_DISTANCE}")
+        if reverse_packet:
+            transmit(reverse_packet)
+            result = receive()
+            if result is not None:
+                [responses, _] = result
+                #print(f"forward command response: {response_string(reverse_packet, responses)}")
+
+    # Step 2: Lateral adjustment for left or right sensor
+    if left_sensor_reading < ULTRASONIC_THRESHOLD:
+        #print("Obstacle detected on the left. Turning right slightly and moving back.")
+        # Turn right slightly
+        turn_right_packet = packetize('d0:3')  # Adjust the angle as needed
+        if turn_right_packet:
+            transmit(turn_right_packet)
+            result = receive()
+            if result is not None:
+                [responses, _] = result
+                #print(f"Turn right response: {response_string(turn_right_packet, responses)}")
+
+    # If the right sensor detects an obstacle, turn slightly left and reverse to simulate a move away
+    elif right_sensor_reading < ULTRASONIC_THRESHOLD:
+        #print("Obstacle detected on the right. Turning left slightly and moving back.")
+        # Turn left slightly
+        turn_left_packet = packetize('d0:-3')  # Adjust the angle as needed
+        if turn_left_packet:
+            transmit(turn_left_packet)
+            result = receive()
+            if result is not None:
+                [responses, _] = result
+                #print(f"Turn left response: {response_string(turn_left_packet, responses)}")
+
+    OBSTACLE_AVOIDING = False  # Reset flag after obstacle avoidance
+
+
+def sensor_checking_loop():
+    '''Continuously check the ultrasonic sensors and invoke obstacle avoidance when needed.'''
+    global OBSTACLE_AVOIDING
+    while RUN_COMMUNICATION_CLIENT:
+        readings = check_ultrasonic_sensors()
+        if readings and any(value < ULTRASONIC_THRESHOLD for value in readings.values()):
+            if not OBSTACLE_AVOIDING:
+                avoid_obstacle(readings)
+        time.sleep(0.1)  # Check sensors every 0.1 seconds
+
+
+############## Main Execution Starts Here ##############
+if __name__ == "__main__":
+    # Start the command execution loop and sensor checking in parallel using threads
+    sensor_thread = threading.Thread(target=sensor_checking_loop, daemon=True)
+    sensor_thread.start()
+
+    # Run the main command execution loop
+    command_execution_loop()
+
+
+
+
+
+
+
 
 
 ############## Main section for the open loop control algorithm ##############
 # The sequence of commands to run
-CMD_SEQUENCE = ['w0:36', 'r0:90', 'w0:36', 'r0:90', 'w0:12', 'r0:-90', 'w0:24', 'r0:-90', 'w0:6', 'r0:720']
-LOOP_PAUSE_TIME = 0.25 # seconds
+CMD_SEQUENCE = ['w0:36', 'r0:90', 'w0:36', 'r0:90', 'w0:12', 'r0:-90', 'w0:24', 'r0:-90', 'w0:6', 'r0:720']  # Move forward 360 inches
+LOOP_PAUSE_TIME = 0.25  # seconds
 
-
-RUN_DEAD_RECKONING = True  # If true, run this. If false, skip it
+RUN_DEAD_RECKONING = False  # If true, run this. If false, skip it
 ct = 0
-last_gyro_check = time.time()
 
 ############## Main Loop ##############
 while RUN_DEAD_RECKONING:
-    current_time = time.time()
-
     # Check ultrasonic sensors for obstacles
-    if not check_ultrasonic_sensors():
-        avoid_obstacle()  # Instead of just stopping, try to avoid the obstacle
-        continue  # After avoidance, continue with normal movement
-
-    # Correct drift using gyroscope
-    if current_time - last_gyro_check >= 0.2:
-        correct_drift_with_gyroscope()
-        last_gyro_check = current_time
+    readings = check_ultrasonic_sensors()
+    if readings and any(value < ULTRASONIC_THRESHOLD for value in readings.values()):
+        avoid_obstacle(readings)  # Avoid the obstacle based on sensor readings
+        continue  # After avoidance, recheck and continue
 
     # Execute the next command in the sequence
     if ct < len(CMD_SEQUENCE):
         packet_tx = packetize(CMD_SEQUENCE[ct])
         if packet_tx:
             transmit(packet_tx)
-            [responses, time_rx] = receive()
-            print(f"Drive command response: {response_string(CMD_SEQUENCE[ct], responses)}")
+            result = receive()
+            if result is not None:
+                [responses, time_rx] = result
+                print(f"Drive command response: {response_string(CMD_SEQUENCE[ct], responses)}")
 
-        if responses[0] and responses[0][1] == 'True':
-            ct += 1
+            if responses[0] and responses[0][1] == 'True':
+                ct += 1
     else:
         RUN_DEAD_RECKONING = False
         print("Sequence complete!")
 
     time.sleep(LOOP_PAUSE_TIME)
+
+
+

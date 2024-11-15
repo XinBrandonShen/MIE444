@@ -271,7 +271,7 @@ def correct_orientation():
         if compass_value % 360 <= 45 or compass_value % 360 >= 315:
             target_angle = 0
         elif 45 < compass_value % 360 <= 135:
-            target_angle = 90
+            target_angle = 90 
         elif 135 < compass_value % 360 <= 225:
             target_angle = 180
         elif 225 < compass_value % 360 <= 315:

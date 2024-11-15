@@ -30,6 +30,7 @@ import socket
 import time
 from datetime import datetime
 import serial
+import threading
 
 # Wrapper functions
 def transmit(data):
@@ -238,8 +239,12 @@ else:
 
 
 
+############## Global Flags ##############
+OBSTACLE_AVOIDING = False  # Flag to control when obstacle avoidance is running
+RUN_DEAD_RECKONING = True  # Main loop running flag
+
 ############## Main section for the communication client ##############
-RUN_COMMUNICATION_CLIENT = True # If true, run this. If false, skip it
+RUN_COMMUNICATION_CLIENT = False  # If true, run this. If false, skip it
 while RUN_COMMUNICATION_CLIENT:
     # Input a command
     cmd = input('Type in a string to send: ')
@@ -250,84 +255,153 @@ while RUN_COMMUNICATION_CLIENT:
         transmit(packet_tx)
 
     # Receive the response
-    [responses, time_rx] = receive()
-    if responses[0]:
-        print(f"At time '{time_rx}' received from {SOURCE}:\n{response_string(cmd, responses)}")
+    result = receive()
+    if result is not None:
+        [responses, time_rx] = result
+        # Check if responses is a list and not a float
+        if isinstance(responses, list) and responses[0]:
+            print(f"At time '{time_rx}' received from {SOURCE}:\n{response_string(cmd, responses)}")
+        else:
+            print(f"At time '{time_rx}' received from {SOURCE}:\nMalformed Packet")
     else:
-        print(f"At time '{time_rx}' received from {SOURCE}:\nMalformed Packet")
+        print("No response received or connection issue occurred.")
 
 
+ULTRASONIC_THRESHOLD = 2  # Threshold for obstacle detection (in inches)
+LATERAL_ADJUST_DISTANCE = 1  # Distance to move laterally when avoiding obstacles
 
+############## Sensor Checking Function ##############
+def check_ultrasonic_sensors():
+    '''Check ultrasonic sensors for potential obstacles and return readings'''
+    readings = {}  # Store the readings from all sensors
+    for sensor_id in ['u0', 'u1', 'u2', 'u3']:  # Assuming 4 ultrasonic sensors
+        packet_tx = packetize(sensor_id)
+        if packet_tx:
+            transmit(packet_tx)
+            result = receive()
+            if result is not None:
+                [responses, time_rx] = result
+                sensor_reading = float(responses[0][1])
+                readings[sensor_id] = sensor_reading
+                print(f"Ultrasonic sensor {sensor_id} reading: {sensor_reading} inches")
+            else:
+                print(f"Failed to receive a response from sensor {sensor_id}.")
+    return readings
 
-############## Main section for the open loop control algorithm ##############
-# The sequence of commands to run
+############## Lateral Adjustment Function ##############
+def lateral_avoidance():
+    '''Continuously checks sensors and moves the rover laterally to avoid obstacles.'''
+    global OBSTACLE_AVOIDING
+    while True:
+        readings = check_ultrasonic_sensors()  # Continuously read sensors
+        left_sensor_reading = readings.get('u1', float('inf'))  # Left sensor
+        right_sensor_reading = readings.get('u2', float('inf'))  # Right sensor
+        front_sensor_reading = readings.get('u0', float('inf'))  # Front sensor
+
+        # Move right if there's an obstacle on the left
+        if left_sensor_reading < ULTRASONIC_THRESHOLD:
+            print("Obstacle detected on the left. Moving right.")
+            OBSTACLE_AVOIDING = True
+            move_right_packet = packetize(f"m0:{LATERAL_ADJUST_DISTANCE}")  # Move right
+            if move_right_packet:
+                transmit(move_right_packet)
+                result = receive()
+                if result is not None:
+                    [responses, _] = result
+                    print(f"Lateral move right response: {response_string(move_right_packet, responses)}")
+                print("Rover moved right to avoid obstacle on the left.")
+
+            OBSTACLE_AVOIDING = False
+
+        # Move left if there's an obstacle on the right
+        elif right_sensor_reading < ULTRASONIC_THRESHOLD:
+            print("Obstacle detected on the right. Moving left.")
+            OBSTACLE_AVOIDING = True
+            move_left_packet = packetize(f"m0:-{LATERAL_ADJUST_DISTANCE}")  # Move left
+            if move_left_packet:
+                transmit(move_left_packet)
+                result = receive()
+                if result is not None:
+                    [responses, _] = result
+                    print(f"Lateral move left response: {response_string(move_left_packet, responses)}")
+                print("Rover moved left to avoid obstacle on the right.")
+
+            OBSTACLE_AVOIDING = False
+
+        # Check if there's an obstacle in the front
+        elif front_sensor_reading < ULTRASONIC_THRESHOLD:
+            print("Obstacle detected in the front. Reversing.")
+            OBSTACLE_AVOIDING = True
+            reverse_packet = packetize(f"w0:-{LATERAL_ADJUST_DISTANCE}")  # Reverse slightly
+            if reverse_packet:
+                transmit(reverse_packet)
+                result = receive()
+                if result is not None:
+                    [responses, _] = result
+                    print(f"Reverse command response: {response_string(reverse_packet, responses)}")
+                print("Rover reversed to avoid obstacle in the front.")
+            OBSTACLE_AVOIDING = False
+
+        else:
+            print("No obstacles detected. Moving forward.")
+            forward_packet = packetize(f"w0:6")  # Move forward if no obstacles
+            if forward_packet:
+                transmit(forward_packet)
+                result = receive()
+                if result is not None:
+                    [responses, _] = result
+                    print(f"Forward command response: {response_string(forward_packet, responses)}")
+            print("Rover moving forward as no obstacles detected.")
+        
+        time.sleep(0.5)  # Check sensors every 0.5 seconds
+
+############## Main Loop for Command Execution ##############
 CMD_SEQUENCE = ['w0:36', 'r0:90', 'w0:36', 'r0:90', 'w0:12', 'r0:-90', 'w0:24', 'r0:-90', 'w0:6', 'r0:720']
-LOOP_PAUSE_TIME = 0.25 # seconds
+LOOP_PAUSE_TIME = 0.25  # seconds
 
-# Main loop
-RUN_DEAD_RECKONING = False # If true, run this. If false, skip it
-ct = 0
-while RUN_DEAD_RECKONING:
-    # Pause for a little while so as to not spam commands insanely fast
-    time.sleep(LOOP_PAUSE_TIME)
-
-    # Emergent stop
-    emergency_stop = False
-
-    # If the command sequence hasn't been completed yet
-    if ct < len(CMD_SEQUENCE):
-
-        # Emergency stop flag
-        emergency_stop = False
-
-        # Check ultrasonic sensors 'u0', 'u1', 'u2', 'u3' for emergency stop
-        sensor_ids = ['u0', 'u1', 'u2', 'u3']  # List of ultrasonic sensors
-        for sensor_id in sensor_ids:
-            packet_tx = packetize(sensor_id)  # Request sensor data
+############## Main Loop for Command Execution ##############
+def main_movement():
+    '''Executes the main movement commands in the CMD_SEQUENCE.'''
+    global OBSTACLE_AVOIDING
+    ct = 0
+    while ct < len(CMD_SEQUENCE):
+        if not OBSTACLE_AVOIDING:  # Execute main command only if not avoiding obstacles
+            packet_tx = packetize(CMD_SEQUENCE[ct])
             if packet_tx:
                 transmit(packet_tx)
-                [responses, time_rx] = receive()
-                sensor_value = float(responses[0][1])  # Assuming sensor data is in the first response
-                print(f"Ultrasonic {sensor_id} reading: {sensor_value}")
+                result = receive()
 
-                # If the sensor reading is lower than 2, initiate emergency stop
-                if sensor_value <= 2:
-                    print(f"Emergency stop triggered by {sensor_id} with value {sensor_value}")
-                    emergency_stop = True
-                    break  # Stop checking sensors, trigger the emergency stop
+                # Ensure the result is valid and not a float or malformed data
+                if result is not None:
+                    [responses, time_rx] = result
+                    if isinstance(responses, list) and responses[0]:
+                        print(f"Drive command response: {response_string(CMD_SEQUENCE[ct], responses)}")
 
-        # If an emergency stop is triggered, send the stop command 'xx'
-        if emergency_stop:
-            packet_tx = packetize('xx')  # Emergency stop command
-            if packet_tx:
-                transmit(packet_tx)
-                [responses, time_rx] = receive()
-                print(f"Emergency stop command response: {response_string('xx', responses)}")
-            RUN_DEAD_RECKONING = False  # Stop the loop after emergency stop
-            continue  # Skip the rest of the loop and stop
+                        if responses[0][1] == 'True':
+                            ct += 1
+                    else:
+                        print("Malformed response or empty packet received.")
+                else:
+                    print("No response received or connection issue occurred.")
+            
+            time.sleep(LOOP_PAUSE_TIME)  # Pause between commands
+        else:
+            time.sleep(0.1)  # If obstacle avoidance is happening, wait before checking the next command
 
 
-        # Check the remaining three sensors: gyroscope, compass, and IR
-        packet_tx = packetize('g0,c0,i0')
-        if packet_tx:
-            transmit(packet_tx)
-            [responses, time_rx] = receive()
-            print(f"Other sensor readings:\n{response_string('g0,c0,i0',responses)}")
 
-        # Send a drive command
-        packet_tx = packetize(CMD_SEQUENCE[ct])
-        if packet_tx:
-            transmit(packet_tx)
-            [responses, time_rx] = receive()
-            print(f"Drive command response: {response_string(CMD_SEQUENCE[ct],responses)}")
+############## Main Execution Starts Here ##############
+if __name__ == "__main__":
+    # Define the CMD_SEQUENCE or load it from external sources
+    CMD_SEQUENCE = ['w0:36', 'r0:90', 'w0:36', 'r0:90', 'w0:12', 'r0:-90', 'w0:24', 'r0:-90', 'w0:6', 'r0:720']
 
-        # If we receive a drive response indicating the command was accepted,
-        # move to the next command in the sequence
-        if responses[0]:
-            if responses[0][1] == 'True':
-                ct += 1
+    # Start two threads: one for obstacle avoidance and one for the main movement
+    obstacle_thread = threading.Thread(target=lateral_avoidance, daemon=True)
+    movement_thread = threading.Thread(target=main_movement, daemon=True)
 
-    # If the command sequence is complete, finish the program
-    else:
-        RUN_DEAD_RECKONING = False
-        print("Sequence complete!")
+    # Start both threads
+    obstacle_thread.start()
+    movement_thread.start()
+
+    # Join threads (wait for them to finish)
+    movement_thread.join()  # The program will keep running until the main movement completes
